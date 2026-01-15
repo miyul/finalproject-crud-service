@@ -1,18 +1,12 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const express = require('express');
 const mongoose = require('mongoose');
 const Member = require('./model');
 const auth = require('./auth')();
 
+const resend = new Resend(process.env.re_5Q4dJBrS_Liw7V6ZpBTZrTUKAqjfAk2L6);
 const app = express();
 const PORT = process.env.PORT || 3002;
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'muhdamirulakmal16@gmail.com',
-    pass: 'mvswygvkvlwgvvtz'
-  }
-});
 
 // MongoDB Cloud
 mongoose.connect(process.env.MONGO_URI)
@@ -37,11 +31,13 @@ function validateHeaders(req, res, next) {
 // ---------------- SEND MAIL FUNCTION ----------------
 async function sendWelcomeEmail(name, email) {
   try {
-    await transporter.sendMail({
-      from: '"Final Project System" <YOUR_GMAIL@gmail.com>',
+    await resend.emails.send({
+      from: 'Final Project <onboarding@resend.dev>',
       to: email,
       subject: 'Welcome to Our System',
-      text: `Hi ${name},\n\nYour account has been successfully created.\n\nThank you!`
+      html: `<p>Hi <b>${name}</b>,</p>
+             <p>Your account has been successfully created.</p>
+             <p>Thank you!</p>`
     });
 
     console.log('Welcome email sent to ' + email);
