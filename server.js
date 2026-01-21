@@ -1,25 +1,27 @@
-const { Resend } = require('resend');
 const express = require('express');
 const mongoose = require('mongoose');
 const Member = require('./model');
 const auth = require('./auth')();
+const axios = require('axios');
 
-const resend = new Resend(process.env.re_5Q4dJBrS_Liw7V6ZpBTZrTUKAqjfAk2L6);
 const app = express();
 const PORT = process.env.PORT || 3002;
+const WEBHOOK_URL = 'https://webhook.site/dfca2134-8940-42fc-8142-4c70e439cdc2';
 
-// MongoDB Cloud
+// MongoDB via ENV (cloud ready)
 mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('CRUD DB connected'))
+  .catch(err => console.error('DB error:', err.message));
 
 // Middleware
 app.use(express.json());
 app.use(auth.initialize());
 
-// 🔐 HEADER VALIDATION
+// 🔐 HEADER VALIDATION (IMPROVED)
 function validateHeaders(req, res, next) {
   if (
-    req.headers['accept'] !== 'application/json' ||
-    req.headers['content-type'] !== 'application/json'
+    !req.headers['accept']?.includes('application/json') ||
+    !req.headers['content-type']?.includes('application/json')
   ) {
     return res.status(406).json({
       message: 'Only application/json is supported'
@@ -28,21 +30,15 @@ function validateHeaders(req, res, next) {
   next();
 }
 
-// ---------------- SEND MAIL FUNCTION ----------------
-async function sendWelcomeEmail(name, email) {
+// ---------------- SYSTEM TO SYSTEM ----------------
+async function notifyExternalSystem(data) {
   try {
-    await resend.emails.send({
-      from: 'Final Project <onboarding@resend.dev>',
-      to: email,
-      subject: 'Welcome to Our System',
-      html: `<p>Hi <b>${name}</b>,</p>
-             <p>Your account has been successfully created.</p>
-             <p>Thank you!</p>`
+    await axios.post(WEBHOOK_URL, data, {
+      headers: { 'Content-Type': 'application/json' }
     });
-
-    console.log('Welcome email sent to ' + email);
+    console.log('System-to-system notification sent');
   } catch (err) {
-    console.error('Email sending failed:', err.message);
+    console.error('System-to-system call failed:', err.message);
   }
 }
 
@@ -51,12 +47,14 @@ app.post('/api/members', validateHeaders, auth.authenticate(), async (req, res) 
   try {
     const member = await Member.create(req.body);
 
-    // 🔔 SYSTEM-TO-SYSTEM COMMUNICATION
-    await sendWelcomeEmail(member.name, member.email);
+    notifyExternalSystem({
+      event: 'MEMBER_CREATED',
+      data: member
+    });
 
     res.status(201).json({
-      message: 'Member created and email sent',
-      member: member
+      message: 'Member created and external system notified',
+      member
     });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -76,12 +74,7 @@ app.get('/api/members', validateHeaders, auth.authenticate(), async (req, res) =
 // ---------------- UPDATE ----------------
 app.put('/api/members/:id', validateHeaders, auth.authenticate(), async (req, res) => {
   try {
-    const updated = await Member.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-
+    const updated = await Member.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!updated)
       return res.status(404).json({ message: 'Record not found' });
 
@@ -95,7 +88,6 @@ app.put('/api/members/:id', validateHeaders, auth.authenticate(), async (req, re
 app.delete('/api/members/:id', validateHeaders, auth.authenticate(), async (req, res) => {
   try {
     const deleted = await Member.findByIdAndDelete(req.params.id);
-
     if (!deleted)
       return res.status(404).json({ message: 'Record not found' });
 
